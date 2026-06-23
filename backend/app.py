@@ -1,5 +1,5 @@
 # backend/app.py
-
+import re
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -9,6 +9,9 @@ from agents.planner import plan_from_prompt
 from agents.designer import generate_theme
 from agents.codegen import generate_files
 from agents.validator import validate_files
+
+from services.file_manager import save_files_to_disk
+from services.github_deployer import deploy_project
 
 import uvicorn
 
@@ -83,15 +86,42 @@ async def generate_site(data: PromptIn):
         validated_files = validate_files(files)
         print(f"✓ Validated {len(validated_files)} files")
 
+
         print("\n" + "="*70)
         print("GENERATION COMPLETE")
         print("="*70 + "\n")
 
+        project_name = plan.get(
+            "site_title",
+            "generated-site"
+        )
+
+        project_name = re.sub(
+            r"[^a-zA-Z0-9-]",
+            "-",
+            project_name
+        )
+
+        project_name = project_name.lower().strip("-")
+
+        project_path = save_files_to_disk(
+            validated_files,
+            project_name
+        )
+
+        deployment_url = deploy_project(
+            project_path,
+            project_name
+        )
+
         return {
             "plan": plan,
             "design": design,
-            "files": validated_files
+            "files": validated_files,
+            "deployment": deployment_url
         }
+
+    
 
     except Exception as e:
         print(f"\n❌ ERROR: {str(e)}\n")
